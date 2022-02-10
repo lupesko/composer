@@ -91,7 +91,7 @@ extra_deps['dev'] = [
     'docformatter>=1.4',
 ]
 
-extra_deps['logging'] = ['wandb>=0.12.2', 'apache-libcloud>=3.4.1']
+extra_deps['logging'] = ['wandb>=0.12.2', 'coolname>=1.1.0', 'apache-libcloud>=3.4.1']
 
 extra_deps['perf'] = ['torch-tb-profiler>=0.3.1', 'psutil>=5.8.0', 'tensorboard>=2.7.0']
 
