@@ -108,7 +108,7 @@ class Event(StringEnum):
             event allows the checkpoint saver to use the results from any batch-wise evaluation to determine whether
             a checkpoint should be saved.
         EPOCH_END: End of an epoch.
-        EPOCH_CHECKPOINT: After :attr:`.Event.EPOCH_END` and any epoch-wise evaluation. Saving checkpoints at this event allows
+        EPOCH_CHECKPOINT: After :attr:`.Event.EPOCH_END` and any epoch-wise evaluation. Saving checkpoints at this
             event allows the checkpoint saver to use the results from any epoch-wise evaluation to determine whether
             a checkpointshould be saved.
         FIT_END: Invoked at the end of each call to :meth:`.Trainer.fit`. This event exists primarily for logging information
@@ -206,6 +206,16 @@ class Event(StringEnum):
         name = name.replace('_start', '')
         name = name.replace('_end', '')
         return name
+
+    @property
+    def is_predict(self) -> bool:
+        """Whether the event is during the predict loop."""
+        return self.value.startswith('predict')
+
+    @property
+    def is_eval(self) -> bool:
+        """Whether the event is during the eval loop."""
+        return self.value.startswith('eval')
 
 
 _BEFORE_EVENTS = (Event.FIT_START, Event.EPOCH_START, Event.BATCH_START, Event.BEFORE_TRAIN_BATCH, Event.BEFORE_FORWARD,

@@ -1,22 +1,23 @@
 # Copyright 2022 MosaicML Composer authors
 # SPDX-License-Identifier: Apache-2.0
 
+import logging
 import os
 import subprocess
 import sys
 import textwrap
-from typing import List, Sequence
+from typing import List
 from unittest.mock import Mock
 
 import pytest
 
 import composer
-from composer.algorithms import SelectiveBackprop
 from composer.core import Engine, Event
 from composer.core.algorithm import Algorithm
 from composer.core.callback import Callback
 from composer.core.state import State
 from composer.loggers import Logger
+from tests.common.events import EventCounterCallback
 
 
 @pytest.fixture
@@ -25,6 +26,7 @@ def always_match_algorithms():
         Mock(**{
             'match.return.value': True,
             'apply.return_value': n,  # return encodes order
+            'interpolate_loss': False,
         }) for n in range(5)
     ]
 
@@ -77,55 +79,6 @@ class TestAlgorithms:
         trace = run_event(event, dummy_state, dummy_logger)
 
         assert all([tr.run is False for tr in trace.values()])
-
-
-@pytest.mark.parametrize('event', [
-    Event.EPOCH_START,
-    Event.BEFORE_LOSS,
-    Event.BEFORE_BACKWARD,
-])
-def test_engine_lifo_first_in(event: Event, dummy_state: State, dummy_logger: Logger,
-                              always_match_algorithms: List[Algorithm]):
-    dummy_state.algorithms = always_match_algorithms
-    trace = run_event(event, dummy_state, dummy_logger)
-    order = [tr.order for tr in trace.values()]
-    expected_order = [tr.exit_code for tr in trace.values()]  # use exit_code to uniquely label algos
-
-    assert order == expected_order
-
-
-@pytest.mark.parametrize('event', [
-    Event.AFTER_LOSS,
-    Event.AFTER_BACKWARD,
-    Event.BATCH_END,
-])
-def test_engine_lifo_last_out(event: Event, dummy_state: State, always_match_algorithms: List[Algorithm],
-                              dummy_logger: Logger):
-    dummy_state.algorithms = always_match_algorithms
-    trace = run_event(event, dummy_state, dummy_logger)
-    order = [tr.order for tr in trace.values()]
-    expected_order = list(reversed([tr.exit_code for tr in trace.values()]))
-
-    assert order == expected_order
-
-
-def test_engine_with_selective_backprop(always_match_algorithms: Sequence[Algorithm], dummy_logger: Logger,
-                                        dummy_state: State):
-    sb = SelectiveBackprop(start=0.5, end=0.9, keep=0.5, scale_factor=0.5, interrupt=2)
-    sb.apply = Mock(return_value='sb')
-    sb.match = Mock(return_value=True)
-
-    event = Event.INIT  # doesn't matter for this test
-
-    algorithms = list(always_match_algorithms[0:2]) + [sb] + list(always_match_algorithms[2:])
-    dummy_state.algorithms = algorithms
-
-    trace = run_event(event, dummy_state, dummy_logger)
-
-    expected = ['sb', 0, 1, 2, 3, 4]
-    actual = [tr.exit_code for tr in trace.values()]
-
-    assert actual == expected
 
 
 def test_engine_is_dead_after_close(dummy_state: State, dummy_logger: Logger):
@@ -239,7 +192,6 @@ def check_output(proc: subprocess.CompletedProcess):
     raise RuntimeError(error_msg)
 
 
-@pytest.mark.timeout(30)
 @pytest.mark.parametrize('exception', [True, False])
 def test_engine_closes_on_atexit(exception: bool):
     # Running this test via a subprocess, as atexit() must trigger
@@ -272,3 +224,22 @@ def test_engine_closes_on_atexit(exception: bool):
         assert 'ImportError: sys.meta_path is None, Python is likely shutting down' not in proc.stderr
     else:
         check_output(proc)
+
+
+def test_logging(caplog: pytest.LogCaptureFixture, dummy_state: State, dummy_logger: Logger):
+    """Test that engine logs statements as expected"""
+    caplog.set_level(logging.DEBUG, logger=Engine.__module__)
+    # Include a callback, since most logging happens around callback events
+    dummy_state.callbacks = [EventCounterCallback()]
+    engine = Engine(dummy_state, dummy_logger)
+    engine.run_event('INIT')
+    engine.close()
+
+    # Validate that we have the expected log entries
+    assert caplog.record_tuples == [
+        ('composer.core.engine', 10, '[ep=0][ba=0][event=INIT]: Running event'),
+        ('composer.core.engine', 10, '[ep=0][ba=0][event=INIT]: Running callback EventCounterCallback'),
+        ('composer.core.engine', 10, 'Closing the engine'),
+        ('composer.core.engine', 10, 'Closing callback EventCounterCallback'),
+        ('composer.core.engine', 10, 'Post-closing callback EventCounterCallback'),
+    ]

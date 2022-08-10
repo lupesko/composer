@@ -11,23 +11,29 @@ Example that trains MNIST with label smoothing:
     python examples/run_composer_trainer.py -f composer/yamls/models/classify_mnist_cpu.yaml --algorithms label_smoothing --alpha 0.1
 """
 
+import logging
+import os
 import sys
 import tempfile
 import warnings
-from typing import Type
 
 from composer.loggers import LogLevel
 from composer.trainer.trainer_hparams import TrainerHparams
 from composer.utils import dist
-
-
-def _warning_on_one_line(message: str, category: Type[Warning], filename: str, lineno: int, file=None, line=None):
-    # From https://stackoverflow.com/questions/26430861/make-pythons-warnings-warn-not-mention-itself
-    return f'{category.__name__}: {message} (source: {filename}:{lineno})\n'
+from composer.utils.misc import warning_on_one_line
 
 
 def _main():
-    warnings.formatwarning = _warning_on_one_line
+    warnings.formatwarning = warning_on_one_line
+
+    global_rank = dist.get_global_rank()
+
+    logging.basicConfig(
+        # Example of format string
+        # 2022-06-29 11:22:26,152: rank0[822018][MainThread]: INFO: composer.trainer.trainer: Using precision Precision.FP32
+        # Including the PID and thread name to help with debugging dataloader workers and callbacks that spawn background
+        # threads / processes
+        format=f'%(asctime)s: rank{global_rank}[%(process)d][%(threadName)s]: %(levelname)s: %(name)s: %(message)s')
 
     if len(sys.argv) == 1:
         sys.argv.append('--help')
@@ -47,8 +53,10 @@ def _main():
 
     # Only log the config once, since it should be the same on all ranks.
     if dist.get_global_rank() == 0:
-        with tempfile.NamedTemporaryFile(mode='x+') as f:
-            f.write(hparams.to_yaml())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hparams_name = os.path.join(tmpdir, 'hparams.yaml')
+            with open(hparams_name, 'w+') as f:
+                f.write(hparams.to_yaml())
             trainer.logger.file_artifact(
                 LogLevel.FIT,
                 artifact_name=f'{trainer.state.run_name}/hparams.yaml',
