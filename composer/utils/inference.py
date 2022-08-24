@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import functools
 import logging
 import os
 import tempfile
@@ -29,9 +30,20 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-__all__ = ['export_for_inference', 'ExportFormat', 'export_with_logger']
+__all__ = ['export_for_inference', 'ExportFormat', 'export_with_logger', 'quantize_dynamic']
 
 Transform = Callable[[nn.Module], nn.Module]
+
+# This is the most common way to use dynamic quantization.
+#  Example:
+#    from composer.utils import quantize_dynamic
+#    export_for_inference(
+#        ...
+#        transforms = [quantize_dynamic],
+#        ...
+#    )
+#  A user can always redefine it with extra options. This also serves as an example of what to pass to transforms.
+quantize_dynamic = functools.partial(torch.quantization.quantize_dynamic, qconfig_spec={torch.nn.Linear})
 
 
 class ExportFormat(StringEnum):
@@ -148,19 +160,20 @@ def export_for_inference(
             export_model = None
             try:
                 export_model = torch.jit.script(model)
-            except Exception as e:
-                log.warning(
-                    'Scripting with torch.jit.script failed with the following exception. Trying torch.jit.trace!',
-                    exc_info=True)
+            except Exception:
                 if sample_input is not None:
+                    log.warning('Scripting with torch.jit.script failed. Trying torch.jit.trace!',)
                     export_model = torch.jit.trace(model, sample_input)
                 else:
-                    raise RuntimeError(
-                        'Scripting with torch.jit.script failed and sample inputs are not provided for tracing with torch.jit.trace'
-                    ) from e
+                    log.warning(
+                        'Scripting with torch.jit.script failed and sample inputs are not provided for tracing '
+                        'with torch.jit.trace',
+                        exc_info=True)
 
             if export_model is not None:
                 torch.jit.save(export_model, local_save_path)
+            else:
+                raise RuntimeError('Scritping and tracing failed! No model is getting exported.')
 
         if save_format == ExportFormat.ONNX:
             if sample_input is None:
@@ -228,7 +241,7 @@ def export_with_logger(
             export_for_inference(model=model,
                                  save_format=save_format,
                                  save_path=temp_local_save_path,
-                                 sample_input=(sample_input,),
+                                 sample_input=sample_input,
                                  transforms=transforms)
             logger.file_artifact(log_level=LogLevel.FIT, artifact_name=save_path, file_path=temp_local_save_path)
     else:
@@ -236,5 +249,5 @@ def export_with_logger(
                              save_format=save_format,
                              save_path=save_path,
                              save_object_store=save_object_store,
-                             sample_input=(sample_input,),
+                             sample_input=sample_input,
                              transforms=transforms)
