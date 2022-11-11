@@ -1,23 +1,26 @@
 # Copyright 2022 MosaicML Composer authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Log to `Comet <https://www.comet.com/docs/v2/>`_."""
+"""Log to `Comet <https://www.comet.com/?utm_source=mosaicml&utm_medium=partner&utm_campaign=mosaicml_comet_integration>`_."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import textwrap
+from typing import Any, Dict, Optional, Sequence, Union
+
+import numpy as np
+import torch
 
 from composer.core.state import State
 from composer.loggers.logger import Logger
 from composer.loggers.logger_destination import LoggerDestination
-from composer.utils import dist
-from composer.utils.import_helpers import MissingConditionalImportError
+from composer.utils import MissingConditionalImportError, dist
 
 __all__ = ['CometMLLogger']
 
 
 class CometMLLogger(LoggerDestination):
-    """Log to `Comet <https://www.comet.com/docs/v2/>`_.
+    """Log to `Comet <https://www.comet.com/?utm_source=mosaicml&utm_medium=partner&utm_campaign=mosaicml_comet_integration>`_.
 
     Args:
         workspace (str, optional): The name of the workspace which contains the project
@@ -36,7 +39,7 @@ class CometMLLogger(LoggerDestination):
             (default: ``False``).
         exp_kwargs (Dict[str, Any], optional): Any additional kwargs to
             comet_ml.Experiment(see
-            `Comet documentation <https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/Experiment/>`_).
+            `Comet documentation <https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/Experiment/?utm_source=mosaicml&utm_medium=partner&utm_campaign=mosaicml_comet_integration>`_).
     """
 
     def __init__(
@@ -73,7 +76,10 @@ class CometMLLogger(LoggerDestination):
         self.name = name
         self._rank_zero_only = rank_zero_only
         self._exp_kwargs = exp_kwargs
-        self.experiment = Experiment(**self._exp_kwargs)
+        self.experiment = None
+        if self._enabled:
+            self.experiment = Experiment(**self._exp_kwargs)
+            self.experiment.log_other('Created from', 'mosaicml-composer')
 
     def init(self, state: State, logger: Logger) -> None:
         del logger  # unused
@@ -87,12 +93,54 @@ class CometMLLogger(LoggerDestination):
             self.name += f'-rank{dist.get_global_rank()}'
 
         if self._enabled:
+            assert self.experiment is not None
             self.experiment.set_name(self.name)
 
     def log_metrics(self, metrics: Dict[str, Any], step: Optional[int] = None) -> None:
         if self._enabled:
+            assert self.experiment is not None
             self.experiment.log_metrics(dic=metrics, step=step)
 
     def log_hyperparameters(self, hyperparameters: Dict[str, Any]):
         if self._enabled:
+            assert self.experiment is not None
             self.experiment.log_parameters(hyperparameters)
+
+    def log_images(self,
+                   images: Union[np.ndarray, torch.Tensor, Sequence[Union[np.ndarray, torch.Tensor]]],
+                   name: str = 'Images',
+                   channels_last: bool = False,
+                   step: Optional[int] = None):
+
+        if self._enabled:
+            if not isinstance(images, Sequence) and images.ndim <= 3:
+                images = [images]
+
+            assert self.experiment is not None
+            image_channels = 'last' if channels_last else 'first'
+            for image in images:
+                comet_image = _convert_to_comet_image(image)
+                self.experiment.log_image(comet_image, name=name, image_channels=image_channels, step=step)
+
+    def post_close(self):
+        if self._enabled:
+            assert self.experiment is not None
+            self.experiment.end()
+
+
+def _convert_to_comet_image(image: Union[np.ndarray, torch.Tensor]):
+
+    # Error out for empty arrays or weird arrays of dimension 0.
+    if np.any(np.equal(image.shape, 0)):
+        raise ValueError(f'Got an image (shape {image.shape}) with at least one dimension being 0! ')
+
+    if image.ndim > 3:
+        raise ValueError(
+            textwrap.dedent(f'''Input image must be 1, 2, or 3 dimensions, but instead got
+                            {image.ndim} dims at shape: {image.shape} Your input image was
+                             interpreted as a batch of {image.ndim}-dimensional images
+                             because you either specified a {image.ndim + 1}D image or a
+                             list of {image.ndim}D images. Please specify either a 4D
+                             image of a list of 3D images'''))
+
+    return image

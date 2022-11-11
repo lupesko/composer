@@ -52,6 +52,7 @@ from composer.algorithms.ghost_batchnorm import GhostBatchNorm
 from composer.algorithms.gradient_clipping import GradientClipping
 from composer.algorithms.label_smoothing import LabelSmoothing
 from composer.algorithms.layer_freezing import LayerFreezing
+from composer.algorithms.low_precision_layernorm import LowPrecisionLayerNorm
 from composer.algorithms.mixup import MixUp
 from composer.algorithms.no_op_model import NoOpModel
 from composer.algorithms.progressive_resizing import ProgressiveResizing
@@ -62,6 +63,7 @@ from composer.algorithms.seq_length_warmup import SeqLengthWarmup
 from composer.algorithms.squeeze_excite import SqueezeExcite, SqueezeExcite2d, SqueezeExciteConv2d
 from composer.algorithms.stochastic_depth import StochasticDepth
 from composer.algorithms.swa import SWA
+from composer.algorithms.weight_standardization import WeightStandardization
 
 __all__ = [
     'Alibi',
@@ -81,6 +83,7 @@ __all__ = [
     'GradientClipping',
     'LabelSmoothing',
     'LayerFreezing',
+    'LowPrecisionLayerNorm',
     'MixUp',
     'NoOpModel',
     'ProgressiveResizing',
@@ -94,4 +97,5 @@ __all__ = [
     'SqueezeExciteConv2d',
     'StochasticDepth',
     'SWA',
+    'WeightStandardization',
 ]

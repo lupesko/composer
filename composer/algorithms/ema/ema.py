@@ -206,7 +206,7 @@ class EMA(Algorithm):
         if event in [Event.BATCH_CHECKPOINT, Event.EPOCH_CHECKPOINT] and self.ema_started:
             checkpoint_savers = [cb for cb in state.callbacks if isinstance(cb, CheckpointSaver)]
             for checkpoint_saver in checkpoint_savers:
-                if checkpoint_saver.checkpoint_save_interval(state, event) is True:
+                if checkpoint_saver.save_interval(state, event) is True:
                     return True
 
         # Otherwise, always run on some events after ema has started
@@ -298,8 +298,10 @@ def _move_params_to_device(model: torch.nn.Module, destination_model: torch.nn.M
     with torch.no_grad():
         destination_params = destination_model.parameters()
         params = model.parameters()
-        model.param_list = [s.to(d.device) for s, d in zip(params, destination_params)]
+        for s, d in zip(params, destination_params):
+            s.to(d.device)
 
         destination_buffers = destination_model.buffers()
         buffers = model.buffers()
-        model.buffer_list = [s.to(d.device) for s, d in zip(buffers, destination_buffers)]
+        for s, d in zip(buffers, destination_buffers):
+            s.to(d.device)

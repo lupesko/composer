@@ -1,16 +1,16 @@
 |:white_check_mark:| Checkpointing
 ==================================
 
-Composer can be configured to automatically save training checkpoints by passing the argument ``checkpoint_save_path`` when
+Composer can be configured to automatically save training checkpoints by passing the argument ``save_folder`` when
 creating the :class:`.Trainer`.
 
-To customize the filenames of checkpoints inside ``checkpoint_save_path``, you can set the ``save_filename`` argument.
-By default, checkpoints will be named like ``'ep{epoch}-ba{batch}-rank{rank}'`` within the ``checkpoint_save_path``.
+To customize the filenames of checkpoints inside ``save_folder``, you can set the ``save_filename`` argument.
+By default, checkpoints will be named like ``'ep{epoch}-ba{batch}-rank{rank}'`` within the ``save_folder``.
 
 In addition, the trainer creates a symlink called ``'latest-rank{rank}'``, which points to the latest saved checkpoint
 file. You can customize this symlink name by setting the ``save_latest_filename`` argument.
 
-The ``checkpoint_save_path``, ``save_filename``, and ``save_latest`` arguments are Python format strings, so you can customize the folder
+The ``save_folder``, ``save_filename``, and ``save_latest`` arguments are Python format strings, so you can customize the folder
 structure to include information such as the rank of the Python process or the current training progress. Please see
 the :class:`~.CheckpointSaver` for the full list of available format variables.
 
@@ -24,7 +24,7 @@ For example:
         model=model,
         train_dataloader=train_dataloader,
         max_duration="2ep",
-        checkpoint_save_path="./path/to/checkpoints",
+        save_folder="./path/to/checkpoints",
         save_filename="ep{epoch}",
         save_latest_filename="latest",
         save_overwrite=True,
@@ -35,17 +35,17 @@ For example:
 Save Interval
 -------------
 
-By default, checkpoints are saved every epoch, but this interval can be configured using the ``checkpoint_save_interval`` argument.
-The ``checkpoint_save_interval`` can be an integer (interpreted as a number of epochs), a time string (see the
+By default, checkpoints are saved every epoch, but this interval can be configured using the ``save_interval`` argument.
+The ``save_interval`` can be an integer (interpreted as a number of epochs), a time string (see the
 :doc:`Time Guide </trainer/time>` for more information), or a function that takes
 (:class:`~.State`, :class:`~.Event`) and returns whether a checkpoint should be saved.
 
 For example:
 
-*   ``checkpoint_save_interval=1`` to save every epoch (the default).
-*   ``checkpoint_save_interval="10ep"`` to save every 10 epochs.
-*   ``checkpoint_save_interval="500ba"`` to save every 500 batches/steps.
-*   ``checkpoint_save_interval=lambda state, event: state.timestamp.epoch > 50 and event == Event.EPOCH_CHECKPOINT``
+*   ``save_interval=1`` to save every epoch (the default).
+*   ``save_interval="10ep"`` to save every 10 epochs.
+*   ``save_interval="500ba"`` to save every 500 batches/steps.
+*   ``save_interval=lambda state, event: state.timestamp.epoch > 50 and event == Event.EPOCH_CHECKPOINT``
     to save every epoch, starting after the 50th epoch.
 
 Putting this together, here's how to save checkpoints:
@@ -59,9 +59,9 @@ Putting this together, here's how to save checkpoints:
         train_dataloader=train_dataloader,
         max_duration="1ep",
         save_filename="ep{epoch}.pt",
-        checkpoint_save_path="./path/to/checkpoints",
+        save_folder="./path/to/checkpoints",
         save_overwrite=True,
-        checkpoint_save_interval="1ep",  # Save checkpoints every epoch
+        save_interval="1ep",  # Save checkpoints every epoch
     )
     trainer.fit()
 
@@ -102,9 +102,9 @@ will continue training from where the checkpoint left off.
         train_dataloader=train_dataloader,
         max_duration="1ep",
         save_filename="ep{epoch}.pt",
-        checkpoint_save_path="./path/to/checkpoints",
+        save_folder="./path/to/checkpoints",
         save_overwrite=True,
-        checkpoint_save_interval="1ep",  # Save checkpoints every epoch
+        save_interval="1ep",  # Save checkpoints every epoch
     )
     trainer.fit()
 
@@ -180,7 +180,7 @@ only the model weights in a checkpoint, set ``save_weights_only=True``.
 
     trainer = Trainer(
         ...,
-        checkpoint_save_path="checkpoints",
+        save_folder="checkpoints",
         save_weights_only=True,
         save_overwrite=True,
     )
@@ -194,7 +194,7 @@ To save multiple checkpoint types, such as full checkpoints and weights-only che
 :class:`~.CheckpointSaver` can be passed directly into the ``callbacks`` argument of the trainer.
 Each :class:`~.CheckpointSaver` can have its own save folder, interval, and other parameters.
 
-When configuring checkpoints via the ``callbacks``, it is not necessary to specify the ``checkpoint_save_path``
+When configuring checkpoints via the ``callbacks``, it is not necessary to specify the ``save_folder``
 or other checkpoint saving parameters directly on the trainer.
 
 .. testcode::
@@ -206,13 +206,13 @@ or other checkpoint saving parameters directly on the trainer.
         ...,
         callbacks=[
             CheckpointSaver(
-                checkpoint_save_path='full_checkpoints',
-                checkpoint_save_interval='5ep',
+                folder='full_checkpoints',
+                save_interval='5ep',
                 overwrite=True,
                 num_checkpoints_to_keep=1,  # only keep the latest, full checkpoint
             ),
             CheckpointSaver(
-                checkpoint_save_path='weights_only_checkpoints',
+                folder='weights_only_checkpoints',
                 weights_only=True,
                 overwrite=True,
             ),
@@ -244,9 +244,9 @@ Parameters with different names will ignored.
         train_dataloader=train_dataloader,
         max_duration="1ep",
         save_filename="ep{epoch}.pt",
-        checkpoint_save_path="./path/to/checkpoints",
+        save_folder="./path/to/checkpoints",
         save_overwrite=True,
-        checkpoint_save_interval="1ep",  # Save checkpoints every epoch
+        save_interval="1ep",  # Save checkpoints every epoch
     )
     trainer.fit()
 
@@ -288,59 +288,61 @@ model outside of a :class:`.Trainer`, use :meth:`torch.load`:
     state_dict = torch.load("./path/to/checkpoints/ep1.pt")
     model.load_state_dict(state_dict["state"]["model"])
 
-Uploading to Object Store
--------------------------
+Uploading Checkpoints to Object Store
+-------------------------------------
 
 Checkpoints can also be saved to and loaded from your object store of choice (e.g. AWS S3 or Google Cloud Storage).
 Writing checkpoints to an object store is a two-step process. The checkpoints are first written to the local filesystem,
-and then the :class:`.ObjectStoreLogger` logger will upload checkpoints to the specified object store.
+and then the :class:`.RemoteUploaderDownloader` logger will upload checkpoints to the specified object store.
 
-Behind the scenes, the :class:`.ObjectStoreLogger` uses :doc:`Apache Libcloud <libcloud:storage/index>`.
+Behind the scenes, the :class:`.RemoteUploaderDownloader` uses :doc:`Apache Libcloud <libcloud:storage/index>`.
+
+The easiest way to upload checkpoints to S3 is to prefix your ``save_folder``  with ``'s3://'``. All other
+checkpoint arguments remain the same. For example, ``save_filename`` will be the name of the checkpoint file
+that gets uploaded to the S3 URI that you specified.
 
 .. testcode::
-    :skipif: not _LIBCLOUD_INSTALLED
+    from composer.trainer import Trainer
 
-    from composer.loggers import ObjectStoreLogger
-    from composer.utils import LibcloudObjectStore
-
-    object_store_logger = ObjectStoreLogger(
-        object_store_cls=LibcloudObjectStore,
-        object_store_kwargs={
-            "provider": "s3",  # The Apache Libcloud provider name
-            "container": "my_bucket",  # The name of the cloud container (i.e. bucket) to use.
-            "provider_kwargs": {  # The Apache Libcloud provider driver initialization arguments
-                'key': 'provider_key',  # The cloud provider key.
-                'secret': '*******',  # The cloud provider secret.
-                # Any additional arguments required for the cloud provider.
-            },
-        },
+    trainer = Trainer(
+        model=model,
+        train_dataloader=train_dataloader,
+        max_duration='10ep',
+        save_folder='s3://my_bucket/checkpoints',
+        save_interval='1ep',
+        save_overwrite=True,
+        save_filename='ep{epoch}.pt',
+        save_num_checkpoints_to_keep=0,  # delete all checkpoints locally
     )
 
-.. seealso::
+    trainer.fit()
 
-    *   :doc:`Full list of object store providers <libcloud:storage/supported_providers>`
-    *   :class:`~.ObjectStoreLogger`
 
-There are a few additional trainer arguments which can be helpful to configure:
+This will train your model, saving the checkpoints locally, upload them to the S3 Bucket `my_bucket`,
+and delete the checkpoints from the local disk. The checkpoints will be located on S3 inside your bucket as
+`checkpoints/ep3.pt` for third epoch's checkpoints, for example. The full URI in this case would be:
+`s3://my_bucket/checkpoints/ep3.pt`.
 
-*   ``num_checkpoints_to_keep``: Set this parameter to remove checkpoints from the local disk after they have been
+*   ``save_num_checkpoints_to_keep``: Set this parameter to remove checkpoints from the local disk after they have been
     uploaded. For example, setting this parameter to 1 will only keep the latest checkpoint locally; setting it to 0
     will remove each checkpoint after it has been uploaded. Checkpoints are never deleted from object stores.
-*   ``save_artifact_name``: To customize how checkpoints are named in the cloud bucket, modify this parameter. By
+*   ``save_remote_file_name``: To customize how checkpoints are named in the cloud bucket, modify this parameter. By
     default, they will be named as ``'{run_name}/checkpoints/ep{epoch}-ba{batch}-rank{rank}'``. See the
     :class:`.CheckpointSaver` documentation for the available format variables.
 
-Once you've configured your object store logger per above, all that's left is to add it to the
-:class:`.Trainer` as part of the ``loggers``:
+This is equivalent to creating a RemoteUploaderDownloader object and adding it to loggers. This a more
+involved operation, but is necessary for uploading checkpoints to other cloud object stores, like
+GCS.
 
 .. testcode::
     :skipif: not _LIBCLOUD_INSTALLED
 
-    from composer.loggers import ObjectStoreLogger
+    from composer.loggers import RemoteUploaderDownloader
+    from composer.trainer import Trainer
 
-    object_store_logger = ObjectStoreLogger(
-        object_store_cls=LibcloudObjectStore,
-        object_store_kwargs={
+    remote_uploader_downloader = RemoteUploaderDownloader(
+        bucket_uri="libcloud://checkpoint-debugging",
+        backend_kwargs={
             "provider": "s3",  # The Apache Libcloud provider name
             "container": "checkpoint-debugging",  # The name of the cloud container (i.e. bucket) to use.
             "provider_kwargs": {  # The Apache Libcloud provider driver initialization arguments
@@ -354,25 +356,120 @@ Once you've configured your object store logger per above, all that's left is to
     trainer = Trainer(
         model=model,
         train_dataloader=train_dataloader,
-        max_duration='90ep',
-        checkpoint_save_path='checkpoints',
-        checkpoint_save_interval='1ep',
+        max_duration='10ep',
+        save_folder='checkpoints',
+        save_interval='1ep',
         save_overwrite=True,
-        save_artifact_name='checkpoints/ep{epoch}.pt',
-        num_checkpoints_to_keep=0,  # delete all checkpoints locally
-        loggers=[object_store_logger],
+        save_filename='ep{epoch}.pt',
+        save_num_checkpoints_to_keep=0,  # delete all checkpoints locally
+        loggers=[remote_uploader_downloader],
     )
 
     trainer.fit()
 
-This will train your model, saving the checkpoints locally, upload them to the S3 Bucket,
-and delete the checkpoints from the local disk.
+.. seealso::
 
-Loading from Object Store
--------------------------
+    *   :doc:`Full list of object store providers <libcloud:storage/supported_providers>`
+    *   :class:`~.RemoteUploaderDownloader`
+
+There are a few additional trainer arguments which can be helpful to configure:
+
+*   ``save_num_checkpoints_to_keep``: Set this parameter to remove checkpoints from the local disk after they have been
+    uploaded. For example, setting this parameter to 1 will only keep the latest checkpoint locally; setting it to 0
+    will remove each checkpoint after it has been uploaded. Checkpoints are never deleted from object stores.
+
+
+Saving Checkpoints to Google Cloud Storage (GCS)
+------------------------------------------------
+
+To save checkpoints to GCS, make sure to create a :class:`.RemoteUploaderDownloader` instance
+and pass it to the ``loggers`` argument of :class:`.Trainer`.
+
+Make sure to input your `HMAC access id and secret <https://cloud.google.com/storage/docs/authentication/hmackeys/>`__
+as `'key'` and `'secret'` respectively to the :class:`.RemoteUploaderDownloader` constructor like so:
+
+.. testcode::
+    :skipif: not _LIBCLOUD_INSTALLED
+
+    from composer.loggers import RemoteUploaderDownloader
+    from composer.trainer import Trainer
+
+    remote_uploader_downloader = RemoteUploaderDownloader(
+        bucket_uri="libcloud://my-gcs-bucket",
+        backend_kwargs={
+            "provider": "google_storage",  # The Apache Libcloud provider name
+            "container": "my-gcs-bucket",  # The name of the cloud container (i.e. bucket) to use.
+            "provider_kwargs": {  # The Apache Libcloud provider driver initialization arguments
+                'key': 'your-HMAC-access-id',  # The cloud provider key.
+                'secret': 'your-HMAC-secret',  # The cloud provider secret.
+                # Any additional arguments required for the cloud provider.
+            },
+        },
+    )
+
+If you don't want to directly enter your access id and secret in plaintext, you can instead
+store them as environment variables and pass the name of the environment variables as shown below:
+
+.. testcode::
+    :skipif: not _LIBCLOUD_INSTALLED
+
+    from composer.loggers import RemoteUploaderDownloader
+    from composer.trainer import Trainer
+
+    remote_uploader_downloader = RemoteUploaderDownloader(
+        bucket_uri="libcloud://my-gcs-bucket",
+        backend_kwargs={
+            "provider": "google_storage",
+            "container": "my-gcs-bucket",
+            "key_environ": "MY_HMAC_ACCESS_ID", # Name of env variable for HMAC access id.
+            "secret_environ": "MY_HMAC_SECRET", # Name of env variable for HMAC secret.
+        },
+    )
+
+
+Putting it all together:
+
+.. testcode::
+    :skipif: not _LIBCLOUD_INSTALLED
+
+    from composer.loggers import RemoteUploaderDownloader
+    from composer.trainer import Trainer
+
+    remote_uploader_downloader = RemoteUploaderDownloader(
+        bucket_uri="libcloud://my-gcs-bucket",
+        backend_kwargs={
+            "provider": "google_storage",
+            "container": "my-gcs-bucket",
+            "key_environ": "MY_HMAC_ACCESS_ID", # Name of env variable for HMAC access id.
+            "secret_environ": "MY_HMAC_SECRET", # Name of env variable for HMAC secret.
+        },
+    )
+
+    trainer = Trainer(
+        model=model,
+        train_dataloader=train_dataloader,
+        max_duration='10ep',
+        save_folder='checkpoints',
+        save_interval='1ep',
+        save_overwrite=True,
+        save_filename='ep{epoch}.pt',
+        save_num_checkpoints_to_keep=0,  # delete all checkpoints locally
+        loggers=[remote_uploader_downloader],
+    )
+
+    trainer.fit()
+
+This will save checkpoints every epoch to the gs URI: ``gs://my-gcs-bucket/checkpoints``.
+Each checkpoint will then be at the gs URI: ``gs://my-gcs-bucket/checkpoints/ep{epoch}.pt``, where
+``{epoch}`` will be filled in with the epoch of that checkpoint.
+
+
+Loading Checkpoints from Object Store
+-------------------------------------
 
 Checkpoints saved to an object store can also be loaded in the same way as files saved on disk. Provide the
-:class:`.LibcloudObjectStore` to the trainer's ``load_object_store`` argument.  The ``load_path`` argument
+:class:`.LibcloudObjectStore` to the trainer's ``load_object_store`` argument (you can also provide the full
+:class:`.RemoteUploaderDownloader` object as well). The ``load_path`` argument
 should be the path to the checkpoint file *within the container/bucket*.
 
 .. testcode::
@@ -401,11 +498,68 @@ should be the path to the checkpoint file *within the container/bucket*.
 
     new_trainer.fit()
 
+An easier way to load checkpoints from S3 specifically is to just use a URI starting with ``s3://``.
+If you use the S3 URI, it is not necessary to specify a ``load_object_store``. Note, that for other
+object stores like WandB or LibCloud, you must still specify a ``load_object_store``.
+
+.. testcode::
+    :skipif: not _LIBCLOUD_INSTALLED
+
+    new_trainer = Trainer(
+    model=model,
+    train_dataloader=train_dataloader,
+    max_duration="10ep",
+    load_path="s3://checkpoint-debugging/checkpoints/ep1.pt",
+    )
+
+    new_trainer.fit()
+
+This will load the first epoch's checkpoints from S3 and resume training in the second epoch.
+
+
+Loading Checkpoints from Google Cloud Storage (GCS)
+---------------------------------------------------
+
+To load checkpoints from GCS, you need to once again create a :class:`.RemoteUploaderDownloader`
+instance, but this time make sure to pass the instance to the ``load_object_store`` argument of the :class:`.Trainer`.
+The ``load_path`` argument should be the path to the checkpoint file *within the container/bucket*.
+
+Here is an example for loading the third epoch's checkpoint from a GCS bucket:
+
+.. testcode::
+    :skipif: not _LIBCLOUD_INSTALLED
+
+    from composer.loggers import RemoteUploaderDownloader
+    from composer.trainer import Trainer
+
+    remote_uploader_downloader = RemoteUploaderDownloader(
+        bucket_uri="libcloud://my-gcs-bucket",
+        backend_kwargs={
+            "provider": "google_storage",
+            "container": "my-gcs-bucket",
+            "key_environ": "MY_HMAC_ACCESS_ID", # Name of env variable for HMAC access id.
+            "secret_environ": "MY_HMAC_SECRET", # Name of env variable for HMAC secret.
+        },
+    )
+
+    new_trainer = Trainer(
+        model=model,
+        train_dataloader=train_dataloader,
+        max_duration="10ep",
+        load_path="checkpoints/ep3.pt",
+        load_object_store=remote_uploader_downloader,
+    )
+
+    new_trainer.fit()
+
+This code will load the third epoch's checkpoint from your GCS bucket and and resume the
+training run on the fourth epoch.
+
+
 API Reference
 -------------
-
-
-*   :class:`.ObjectStoreLogger` for saving checkpoints to cloud storage.
+*   :class:`.RemoteUploaderDownloader` for saving checkpoints to cloud storage.
 *   :class:`.Trainer` for the trainer checkpoint arguments.
 *   :class:`.CheckpointSaver` for the CheckpointSaver arguments.
+*   :class:`.LibcloudObjectStore` for setting up libcloud-supported object stores.
 *   :mod:`composer.utils.checkpoint` for the underlying utilities to manually save and load checkpoints.

@@ -70,7 +70,6 @@ Composer is part of the broader Machine Learning community, and we welcome any c
    examples/checkpoint_autoresume.ipynb
    examples/training_without_local_storage.ipynb
    examples/exporting_for_inference.ipynb
-   examples/glue/glue_entrypoint.ipynb
    examples/TPU_Training_in_composer.ipynb
    tutorials/train_resnet50_on_aws.md
 
@@ -96,7 +95,7 @@ Composer is part of the broader Machine Learning community, and we welcome any c
    trainer/events.rst
    trainer/checkpointing.rst
    trainer/logging.rst
-   trainer/artifact_logging.rst
+   trainer/file_uploading.rst
    trainer/callbacks.rst
    trainer/performance.rst
 
@@ -126,6 +125,7 @@ Composer is part of the broader Machine Learning community, and we welcome any c
    method_cards/colout.md
    method_cards/cutmix.md
    method_cards/cutout.md
+   method_cards/decoupled_weight_decay.md
    method_cards/ema.md
    method_cards/factorize.md
    method_cards/fused_layernorm.md
@@ -134,6 +134,7 @@ Composer is part of the broader Machine Learning community, and we welcome any c
    method_cards/gradient_clipping.md
    method_cards/label_smoothing.md
    method_cards/layer_freezing.md
+   method_cards/low_precision_layernorm.md
    method_cards/mixup.md
    method_cards/progressive_resizing.md
    method_cards/randaugment.md
@@ -145,6 +146,7 @@ Composer is part of the broader Machine Learning community, and we welcome any c
    method_cards/stochastic_depth.md
    method_cards/stochastic_depth_samplewise.md
    method_cards/swa.md
+   method_cards/weight_standardization.md
 
 .. toctree::
    :hidden:

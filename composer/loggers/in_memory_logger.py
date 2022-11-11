@@ -9,15 +9,17 @@ Useful for collecting and plotting data inside notebooks.
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from torch import Tensor
 
-from composer.core.state import State
-from composer.core.time import Time, Timestamp
+from composer.core.time import Time
 from composer.loggers.logger import Logger
 from composer.loggers.logger_destination import LoggerDestination
+
+if TYPE_CHECKING:
+    from composer.core import State, Timestamp
 
 __all__ = ['InMemoryLogger']
 
@@ -30,7 +32,7 @@ class InMemoryLogger(LoggerDestination):
     Example usage:
         .. testcode::
 
-            from composer.loggers import InMemoryLogger, LogLevel
+            from composer.loggers import InMemoryLogger
             from composer.trainer import Trainer
             logger = InMemoryLogger(
             )
@@ -47,7 +49,7 @@ class InMemoryLogger(LoggerDestination):
             logged_data = trainer.logger.destinations[0].data
 
     Attributes:
-        data (Dict[str, List[Tuple[Timestamp, LogLevel, Any]]]): Mapping of a logged key to
+        data (Dict[str, List[Tuple[Timestamp, Any]]]): Mapping of a logged key to
             a (:class:`~.time.Timestamp`, logged value) tuple.
             This dictionary contains all logged data.
         most_recent_values (Dict[str, Any]): Mapping of a key to the most recent value for that key.
